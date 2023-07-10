@@ -124,7 +124,7 @@ class GeometricPrediction():
         indices_for_missing = np.where(points == [-1, -1])[0]
         # print(f'indices_for_missing: {indices_for_missing"')
 
-        print(the_template)
+        #print(the_template)
         if indices_for_missing.any():
             incomplete_template = np.delete(
                 the_template, indices_for_missing, axis=0)

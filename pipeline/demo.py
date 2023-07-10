@@ -175,10 +175,7 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
                      'r_ear', 'l_ear']
 
         joint_hits = np.zeros((len(names), len(kpt_names)))
-        
         patientPose = None
-        ft_combined_pose = None
-        kpt_non_update_counter = np.zeros(18)
 
     # Dataloader
     if webcam:
@@ -224,6 +221,9 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
                             cv2.VideoWriter_fourcc(*'MP4V'),
                             30, # TODO: get fps from video source
                             (1920 ,1080)) # get resolution from video source
+        
+    # Carry Pose counter
+    frames_without__pose_update = 0
 
     final_img = None
     for frame_idx, (path, im, im0s, vid_cap, s) in enumerate(dataset):
@@ -280,8 +280,8 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
 
             biggest_id = -1
             biggest_value = 0
-
             patientPoseUpdated = False # Variable for whether HPE model has updated
+            frames_without__pose_update += 1
 
             for current_pose in current_poses:
                 area = current_pose.bbox[2] * current_pose.bbox[3]
@@ -326,6 +326,7 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
                             patientPose = pose
                         pose.draw(output_img, [255, 255, 0])
                         patientPoseUpdated = True
+                        frames_without__pose_update = 0
 
                         # BBOX Torso Test
                         torso_kpts = []
@@ -342,9 +343,6 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
                         if torso_kpts:
                             torso_kpts = np.array(torso_kpts)
                             torso_bbox = torch.tensor(cv2.boundingRect(torso_kpts), device=device)
-            
-            if (not patientPoseUpdated) and (patientPose is not None): # Clearing poses if not updated
-                patientPose.keypoints = np.full((18, 2), -1)
 
         # Optical flow
         if opt.optical_flow and (opt.hpe or opt.gpe):
@@ -355,40 +353,18 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
                     of_pose = patientPose
                     for i in range(len(of_pose.keypoints)):
                         of_pose.keypoints[i]+=shifts[i]
-                    of_pose.draw(output_img, (255,150,255))
+                    of_pose.draw(output_img, (255,150,255)) if (frames_without__pose_update <= opt.carry_pose) else None
                 if of_pose is not None:
                     patientPose = of_pose
 
         # Feature transformations
         if opt.feature_transform and (opt.hpe or opt.gpe):
             if patientPose is not None:
-                ft_matrix = ft.calc(orig_img, frame_idx, new_dir)
-            
-                if ft_combined_pose is None:
-                    ft_kpts = cv2.perspectiveTransform(patientPose.keypoints.astype(ft_matrix.dtype).reshape(-1, 1, 2), ft_matrix).astype(np.int32).reshape(-1, 2)
-                    indices = np.where(np.all(patientPose.keypoints == [-1, -1], axis=1))
-                else:
-                    ft_kpts = cv2.perspectiveTransform(ft_combined_pose.keypoints.astype(ft_matrix.dtype).reshape(-1, 1, 2), ft_matrix).astype(np.int32).reshape(-1, 2)
-                    indices = np.where(np.all(ft_combined_pose.keypoints == [-1, -1], axis=1))
-
-                ft_kpts[indices] = [-1, -1]
-                indices = np.where(np.all(patientPose.keypoints != [-1, -1], axis=1))
-                ft_kpts[indices] = patientPose.keypoints[indices]
-
-                for i, pt in enumerate(zip(patientPose.keypoints[:, 0], patientPose.keypoints[:, 1])):
-                    if patientPoseUpdated and (pt != [-1, -1]):
-                        kpt_non_update_counter[i] = 0
-                    else:
-                        kpt_non_update_counter[i] += 1
-
-                    if kpt_non_update_counter[i]>= 10:
-                       ft_kpts[i] = [-1, -1]
-
-                ft_combined_pose = Pose(ft_kpts, None)
-                ft_combined_pose.draw(output_img, (0,0,0))
-                patientPose.draw(output_img, (255,255,0))
-                
-     
+                ft_matrix = ft.calc(orig_img, frame_idx, patientPose, patientPoseUpdated, new_dir)
+                ft_pose = patientPose
+                ft_pose.keypoints = cv2.perspectiveTransform(patientPose.keypoints.astype(ft_matrix.dtype).reshape(-1, 1, 2), ft_matrix).astype(np.int32).reshape(-1, 2)
+                ft_pose.keypoints[np.where(patientPose == -1)] = -1 
+                ft_pose.draw(output_img, (0,255,0)) if (frames_without__pose_update <= opt.carry_pose) else None
 
         # Yolo Preprocessing + Inference + NMS
         im = torch.from_numpy(im).to(device).float()
@@ -457,29 +433,41 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
                 conf = det[0][4]
                 cls = det[0][5]
                 c = int(cls)  # integer class
-                if c == 2:
-                    print('cs')
                 if opt.hpe or opt.gpe:
+
+                    if (frames_without__pose_update > opt.carry_pose):
+                        patientPose = None
 
                     #check for which pure overlap (add forgiveness paramter for f number of frames back to check)
                     if patientPose is not None:
                         pose_bbox = pose.get_bbox(patientPose.keypoints)
-                        mask = patientPose.keypoints != -1
+                        x0, y0, w, h = pose_bbox
+                        #print(patientPose.keypoints)
+                        mask = patientPose.keypoints > -1
+                        #print(mask)
+                        #print(pose_bbox)
+                        pose_area = w * h
+                        #print("Area:", area)
+
                         num_jts_detected = np.count_nonzero(mask)/2
-                        x0, y0, xf, yf = pose_bbox
+                        #pose_cross_distance = math.sqrt((xf - x0)**2 + (yf - y0)**2)
                         #mid_pose_x = int((x0+xf)/2)
                         #mid_pose_y = int((y0+yf)/2)
-                        x_jt_len = abs(x0-xf)
-                        y_jt_len = abs(y0-yf)
+                        #x_jt_len = abs(x0-xf)
+                        #y_jt_len = abs(y0-yf)
                         y_frame_len, x_frame_len, _ = orig_img.shape
+                        frame_area = y_frame_len * x_frame_len
+                        #print(orig_img.shape)
+                        pose_area_pct = pose_area/frame_area
+                        #print(pose_area_pct)
                         #if (x_jt_len*y_jt_len)/(y_frame_len*x_frame_len) > min__jt_area_pct: #and num_jts_detected >= min_jt_count:
+                        #if pose_area_pct > opt.min_pose_percent:
                         if True:
-                            min_idx = map_tr_to_jts(bbox, patientPose.keypoints, new_dir, joint_hits, frame_idx, c, orig_img, max_allowed_dist_pct, num_jts_detected, min_jt_count, save_img=opt.write_imgs)
-
-                            frame_hits += 1
+                            min_idx = map_tr_to_jts(bbox, patientPose.keypoints, new_dir, joint_hits, frame_idx, c, orig_img, max_allowed_dist_pct, num_jts_detected, min_jt_count, pose_area_pct, float(opt.min_pose_percent), save_img=opt.write_imgs)
 
                             # Only for hemostatic and pressure dressings TODO this was moved under if statement
                             if min_idx is not None:
+                                frame_hits += 1
                                 #if torso_bbox is not None and (names[c] == 'hd' or names[c] == 'pd'):
                                     #torsoIOU = bbox_iou(bbox, torso_bbox)
                                     #print(torsoIOU.item())
@@ -583,8 +571,10 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
     #print(body.body_parts[Limbs.torso.value])
 
     # Pre zscore summary
+    tccc_summary_no_z = copy.deepcopy(body.getSummary())
+    
     tccc_summary = body.getSummary()
-    print(f'pre-zscore tccc_summary: {tccc_summary}')
+    #print(f'pre-zscore tccc_summary: {tccc_summary}')
 
     zscore_drops = intervention.process(new_dir, opt.zscore_window_size, opt.zscore_threshold) #TODO Verify
     #tour_zscore_drops = zscore_drops
@@ -594,11 +584,13 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
     joitnt_hits_dropped_tour_jts_not_preserved = drop_zscore_tour(zscore_drops, joint_hits) # TODO: Broken -> evaluate.py 267 (IndexError: index 2 is out of bounds for axis 0 with size 2)
     #print(joitnt_hits_dropped_tour_jts_not_preserved)
     tccc_summary = body.getSummary()
-    print(f'tccc_summary: {tccc_summary}')
+    #print(f'tccc_summary: {tccc_summary}')
     raw_metrics_limb = None
     prom_metrics = None
 
-    print(joint_hits[2])
+    #print(joint_hits[2])
+    #print(tccc_summary)
+    #print(tccc_summary_no_z)
 
 
     if opt.labels != '0':
@@ -618,6 +610,8 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
 
         summary_metrics = get_summary_metrics(tccc_summary, labels)
 
+        summary_metrics_no_z = get_summary_metrics(tccc_summary_no_z, labels)
+
         # filter results to throw away assignments that have fewer than half the
         # largest num of frames
 
@@ -625,9 +619,18 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
         for _,_,count,_ in tccc_summary:
             if count > max_count:
                 max_count = count
-        tccc_summary_filtered = [hit for hit in tccc_summary if hit[2] >= .5 * max_count] #attempting to push out FP by dropping pairs that have total frames < X, s.t. X is the highest pair frame count
+        tccc_summary_filtered = [hit for hit in tccc_summary if hit[2] >= opt.marcs_threshold * max_count] #attempting to push out FP by dropping pairs that have total frames < X, s.t. X is the highest pair frame count
         summary_metrics_filtered = get_summary_metrics(tccc_summary_filtered, labels)
 
+        max_count = 0
+        for _,_,count,_ in tccc_summary_no_z:
+            if count > max_count:
+                max_count = count
+        tccc_summary_filtered_no_z = [hit for hit in tccc_summary_no_z if hit[2] >= opt.marcs_threshold * max_count] #attempting to push out FP by dropping pairs that have total frames < X, s.t. X is the highest pair frame count
+        summary_metrics_filtered_no_z = get_summary_metrics(tccc_summary_filtered_no_z, labels)
+
+        '''
+        #FOR DOT GETTING BIGGER
         gui.clearTCCC() # Clear TCCC
         gui.outputFrame = final_img
         pair_count = 0
@@ -642,6 +645,7 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
         if opt.verbose_gui and opt.write_vid:
             for qq in range(200):
                 vid_writer.write(gui.drawGUI())
+        '''
         
         # Release video writer
         if opt.write_vid:
@@ -651,7 +655,10 @@ def run(opt, min_jt_count, max_allowed_dist_pct, min__jt_area_pct, labels=None, 
 
     progressBar.close() if is_file else None
 
-    return raw_metrics_limb, raw_metrics_limb_filtered, frame_hits/frame_count, summary_metrics, summary_metrics_filtered, prom_metrics
+    #print(summary_metrics_filtered)
+    #print(summary_metrics_filtered_no_z)
+
+    return raw_metrics_limb, raw_metrics_limb_filtered, frame_hits/frame_count, summary_metrics, summary_metrics_filtered, prom_metrics, summary_metrics_no_z, summary_metrics_filtered_no_z
 
 def parse_opt():
     parser = argparse.ArgumentParser()
@@ -667,11 +674,12 @@ def parse_opt():
     # Treatment Assignment Parameters
     parser.add_argument('--min_jts', default=1, help='Set a minimum number of joints to be detected for a pose to be considered valid')
     parser.add_argument('--max_allowed_dist_pct', default=1, help='Set a maximum distance as a percentage of the frame size from the treatment to the pose for the frame to be considered valid')
-    parser.add_argument('--min_jt_area', default=0, help='Set a minimum area as a percentage of frame area that a pose bbox must occupy for a frame to be considered valid')
-    parser.add_argument('--min_pose_percent', default=0.15, help='Set a minimum precentage of screen that pose must be')
+    #parser.add_argument('--min_jt_area', default=0, help='Set a minimum area as a percentage of frame area that a pose bbox must occupy for a frame to be considered valid')
+    parser.add_argument('--min_pose_percent', default=0.25, help='Set a minimum precentage of screen that pose must be')
     parser.add_argument('--min_bpe_iou', default = 0.1, type=float, help='minimum iou (jaccard index) of bpe bounding box and treatment bounding box')
     parser.add_argument('--zscore_window_size', default=60, type=int, help='Zscore moving window size')
     parser.add_argument('--zscore_threshold', default=1.5, type=float, help='Zscore threshold to drop frame')
+    parser.add_argument('--marcs_threshold', default=.5, type=float, help='Majorityt Vote Threshold')
     
     # Boolean Flags
     parser.add_argument('--verbose_gui', action=argparse.BooleanOptionalAction, default=False, help='Saves recording with TCCC output drawn in video')
@@ -687,6 +695,7 @@ def parse_opt():
     # Pose Estimation Augementations
     parser.add_argument('--optical_flow', action=argparse.BooleanOptionalAction, default=False, help='Draws motion from sparse optical flow using Lucas-Kanade method')
     parser.add_argument('--feature_transform', action=argparse.BooleanOptionalAction, default=False, help='Uses SIFT feature matching to transform poses between frames')
+    parser.add_argument('--carry_pose', default=0, type=int, help='Carry old pose through how many frames')
 
     opt = parser.parse_args()
     print_args(vars(opt))
@@ -708,12 +717,13 @@ def main(opt):
     elif vid_path != '0' and opt.labels != '0':
         vids = os.listdir(vid_path)
         sorted_vids = sorted(vids, key=natsort)
-        run_videos(sorted_vids, vid_path, opt)
+        sorted_vids_new = filtered_list = [video for video in sorted_vids if not video.startswith('._')]
+        run_videos(sorted_vids_new, vid_path, opt)
 
     elif opt.labels != '0':
         label_dict = get_data(opt.labels)
         vid_name = opt.source.rsplit('/', 1)[-1].split('.')[0]
-        raw_metrics, _, frame_hit_rate, summary_metrics, summary_metrics_filtered, prom_metrics = run(opt, int(opt.min_jts),float(opt.max_allowed_dist_pct),float(opt.min_jt_area), labels=label_dict[vid_name])
+        raw_metrics, _, frame_hit_rate, summary_metrics, summary_metrics_filtered, prom_metrics, _, _ = run(opt, int(opt.min_jts),float(opt.max_allowed_dist_pct),float(opt.min_pose_percent), labels=label_dict[vid_name])
         #print(raw_metrics)
         #print(frame_hit_rate)
         #print(summary_metrics)

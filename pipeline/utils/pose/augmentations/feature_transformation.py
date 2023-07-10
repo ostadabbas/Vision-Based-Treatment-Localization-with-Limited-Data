@@ -10,7 +10,7 @@ class FeatureTransformation():
         self.lastFrame = None
 
     
-    def calc(self, frame, frame_idx, save_dir = None):
+    def calc(self, frame, frame_idx, pose, patientPoseUpdated, save_dir = None):
         '''
         Calculates transformation matrix between two frames
 
@@ -23,7 +23,7 @@ class FeatureTransformation():
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        if (self.lastFrame is None):
+        if (self.lastFrame is None) or (patientPoseUpdated):
             self.lastFrame = frame
             return np.identity(3) # Return transformation matrix as the identity matrix
 

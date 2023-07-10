@@ -13,6 +13,9 @@ from matplotlib.patches import Rectangle
 
 def output_results(source, kpt_names, names, joint_hits, prominences, opt, new_dir):
 
+    title_names = {0: 'Tourniquet', 1: 'Pressure Dressing', 2: 'Chest Seal', 3: 'Hemostatic Dressing'}
+    kpt_titles = ['Nose', 'Neck', 'Right Shoulder', 'Right Elbow', 'Right Wrist', 'Left Shoulder', 'Left Elbow', 'Left Wrist', 'Right Hip', 'Right Knee', 'Right Ankle', 'Left Hip', 'Left Knee', 'Left Ankle', 'Right Eye', 'Left Eye', 'Right Eye', 'Left Ear']
+
     #def output_results(source, kpt_names, names, joint_hits, prominences):
 
     #new_dir = source.rsplit('/', 1)[-1].split('.')[0]
@@ -42,20 +45,34 @@ def output_results(source, kpt_names, names, joint_hits, prominences, opt, new_d
                 f.write(str(jt_score))
                 f.write('\n')
             plt.figure(tr_idx)
-            plt.bar(kpt_names, tr_jt_hits)
-            title = names[tr_idx] + 'Distribution'
+            plt.bar(kpt_titles, tr_jt_hits)
+            title = title_names[tr_idx] + ' Distribution'
             plt.suptitle(title)
-            plt.xticks(rotation='vertical')
+            #plt.xticks(rotation='vertical')
+            
+            # Rotate x-axis tick labels diagonally
+            plt.xticks(rotation=45, ha='right')
+            # Adjust figure size
+            fig = plt.gcf()
+            fig.set_size_inches(7, 9)
+            
             img_name = './'+ new_dir + '/figs/' + names[tr_idx] + '.png'
             plt.savefig(img_name,dpi=400)
             plt.tight_layout()
             plt.clf()
 
             plt.figure(tr_idx+num_tr)
-            plt.bar(limb_labels[0:-1], jt_to_limb(tr_jt_hits))
-            title = names[tr_idx] + 'Distribution'
+            plt.bar(limb_titles[0:-1], jt_to_limb(tr_jt_hits))
+            title = title_names[tr_idx] + ' Distribution'
             plt.suptitle(title)
-            plt.xticks(rotation='vertical')
+            #plt.xticks(rotation='vertical')
+
+            # Rotate x-axis tick labels diagonally
+            plt.xticks(rotation=45, ha='right')
+            # Adjust figure size
+            fig = plt.gcf()
+            fig.set_size_inches(7, 9)
+
             img_name = './'+ new_dir + '/figs/limb_' + names[tr_idx] + '.png'
             plt.savefig(img_name,dpi=400)
             plt.tight_layout()
@@ -68,12 +85,12 @@ def output_results(source, kpt_names, names, joint_hits, prominences, opt, new_d
         f.write(str(opt.max_allowed_dist_pct))
         f.write('\n')
         f.write("Minimum Joint Area: ")
-        f.write(str(opt.min_jt_area))
+        f.write(str(opt.min_pose_percent))
         f.write('\n')
 
 
 
-def map_tr_to_jts(bbox, patient_kpts, new_dir, joint_hits, frame_idx, class_idx, orig_img, max_allowed_dist_pct, num_jts_detected, min_jt_count, save_img=True):
+def map_tr_to_jts(bbox, patient_kpts, new_dir, joint_hits, frame_idx, class_idx, orig_img, max_allowed_dist_pct, num_jts_detected, min_jt_count, pose_area_pct, min_pose_percent, save_img=True):
 #def map_tr_to_jts(bbox, patient_kpts, new_dir, joint_hits, frame_idx, class_idx, orig_img, max_allowed_dist_pct, save_img=True):
     '''
     This function is where the magic happens. It is where we decide what will count as a hit. That is, when do we map a treatment to a joint and consider 
@@ -113,7 +130,7 @@ def map_tr_to_jts(bbox, patient_kpts, new_dir, joint_hits, frame_idx, class_idx,
             if d < min_dist:
                 min_dist = d
                 min_idx = idx
-    if min_dist < max_allowed_dist and num_jts_detected >= min_jt_count:
+    if min_dist < max_allowed_dist and num_jts_detected >= min_jt_count and pose_area_pct > min_pose_percent:
         joint_hits[class_idx,min_idx] += 1 #TODO This is the modification needed for a non-binary mapping function
         if save_img:
             os.mkdir('./'+new_dir+'/images') if not os.path.exists('./'+new_dir+'/images') else None
@@ -128,17 +145,21 @@ def map_tr_to_jts(bbox, patient_kpts, new_dir, joint_hits, frame_idx, class_idx,
         if min_idx is not None:
             orig_img = cv2.line(orig_img, (int(center_x), int(center_y)), (patient_kpts[min_idx][0], patient_kpts[min_idx][1]), (0, 255, 0), 10)
         orig_img = cv2.rectangle(orig_img, (int(bbox[0]),int(bbox[1])), (int(bbox[2]),int(bbox[3])), (255, 255, 255), 20)
-        max_dist_str = "Max distance " + str(max_allowed_dist) + " of total distance " + str(int(frame_cross_dist))
+        max_dist_str = "Max allowed distance " + str(max_allowed_dist) + " of total distance " + str(int(frame_cross_dist))
         curr_dist_str = "Current distance: " + str(int(min_dist))
         min_jts_str = "Min joints required:  " + str(min_jt_count)
         curr_jts_str = "Current joints: " + str(int(num_jts_detected))
+        min_pose_area_str = "Min Pose Area:  " + str(min_pose_percent)
+        curr_pose_area_str = "Current Pose Area: " + str(pose_area_pct)
         
         orig_img = cv2.putText(orig_img, max_dist_str, (50,50),font, font_scale, color, thickness, cv2.LINE_AA)
         orig_img = cv2.putText(orig_img, curr_dist_str, (50,80),font, font_scale, color, thickness, cv2.LINE_AA)
         orig_img = cv2.putText(orig_img, min_jts_str, (50,110),font, font_scale, color, thickness, cv2.LINE_AA)
         orig_img = cv2.putText(orig_img, curr_jts_str, (50,140),font, font_scale, color, thickness, cv2.LINE_AA)
+        orig_img = cv2.putText(orig_img, min_pose_area_str, (50,170),font, font_scale, color, thickness, cv2.LINE_AA)
+        orig_img = cv2.putText(orig_img, curr_pose_area_str, (50,200),font, font_scale, color, thickness, cv2.LINE_AA)
         cv2.imwrite(filename, orig_img)
-    if min_dist < max_allowed_dist and num_jts_detected >= min_jt_count:
+    if min_dist < max_allowed_dist and num_jts_detected >= min_jt_count and pose_area_pct > min_pose_percent:
         return min_idx
     else: 
         return None
@@ -225,6 +246,7 @@ tr_label_mapping = {'TRN': 'tour',
 
 #limb_labels = ['Head', 'R_arm', 'L_arm', 'R_leg', 'L_leg', 'Torso', 'Chest']
 limb_labels = ['Head', 'R_arm', 'L_arm', 'R_leg', 'L_leg', 'Torso']
+limb_titles = ['Head', 'Right Arm', 'Left Arm', 'Right Leg', 'Left Leg', 'Torso']
 def jt_to_limb(arr):
     limb_indices = [[0, 1, 14, 15, 16], [2, 3, 4], [5, 6, 7], [8, 9, 10], [11, 12, 13]]
     sums = np.array([arr[idx].sum() for idx in limb_indices])
@@ -733,7 +755,7 @@ def get_parser_args(opt):
             f.write(f"{arg}={getattr(opt, arg)}\n")
 
 def run_videos(sorted_vids, vid_path, opt):
-    #print(f'videos: {sorted_vids}')
+    print(f'videos: {sorted_vids}')
     label_dict = get_data(opt.labels)
     output_dict = {}
     get_parser_args(opt)
@@ -742,18 +764,18 @@ def run_videos(sorted_vids, vid_path, opt):
         path_v = vid_path + v
         opt.source = path_v
         vid_name = opt.source.rsplit('/', 1)[-1].split('.')[0]
-        raw_metrics, raw_metrics_filtered, frame_hit_rate, summary_metrics, summary_metrics_filtered, prom_metrics = run(opt, int(opt.min_jts),float(opt.max_allowed_dist_pct),float(opt.min_jt_area), labels=label_dict[vid_name])
+        raw_metrics, raw_metrics_filtered, frame_hit_rate, summary_metrics, summary_metrics_filtered, prom_metrics, summary_metrics_no_z, summary_metrics_filtered_no_z = run(opt, int(opt.min_jts),float(opt.max_allowed_dist_pct),float(opt.min_pose_percent), labels=label_dict[vid_name])
         if raw_metrics is not None:
             (true_pos_pair_count, false_pos_pair, pair_precision), (true_pos_tr, false_pos_tr, tr_precision), (true_pos_limb, false_pos_limb, limb_precision), missed_labels, metric_per_label, drop_impossible_tour_points, bad_jt_counts_per_tr = raw_metrics
             (true_pos_pair_count_filtered, false_pos_pair_filtered, pair_precision_filtered), _, _, _, _, _, _ = raw_metrics_filtered
 
             output_dict[v] = {
-                "Overall_TP" : true_pos_pair_count,
-                "Overall_FP" : false_pos_pair,
-                "Overall_Prec" : pair_precision,
-                "Overall_TP_Filtered" : true_pos_pair_count_filtered,
-                "Overall_FP_Filtered" : false_pos_pair_filtered,
-                "Overall_Prec_Filtered" : pair_precision_filtered,
+                "Overall_TP No Z" : true_pos_pair_count,
+                "Overall_FP No Z" : false_pos_pair,
+                "Overall_Prec No Z" : pair_precision,
+                "Overall_TP" : true_pos_pair_count_filtered,
+                "Overall_FP" : false_pos_pair_filtered,
+                "Overall_Prec" : pair_precision_filtered,
                 "Overall_False_Discovery": 1-pair_precision,
                 "Treatment_TP" : true_pos_tr,
                 "Treatment_FP" : false_pos_tr,
@@ -768,6 +790,12 @@ def run_videos(sorted_vids, vid_path, opt):
                 "TCCC Sorted TP": summary_metrics_filtered[0],
                 "TCCC Sorted FP": summary_metrics_filtered[1],
                 "TCCC Sorted FN": summary_metrics_filtered[2],
+                "TCCC TP No Z": summary_metrics_no_z[0],
+                "TCCC FP No Z": summary_metrics_no_z[1],
+                "TCCC FN No Z": summary_metrics_no_z[2],
+                "TCCC Sorted TP No Z": summary_metrics_filtered_no_z[0],
+                "TCCC Sorted FP No Z": summary_metrics_filtered_no_z[1],
+                "TCCC Sorted FN No Z": summary_metrics_filtered_no_z[2],
                 " ": " ",
                     
             }
