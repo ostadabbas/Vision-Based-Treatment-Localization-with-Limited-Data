@@ -10,7 +10,7 @@
 The computer vision models for the CSCT project are essential in the identification of external medical interventions. Using live camera feeds, we process the frames through various models to both identify and localize the site of the interventions. To achieve this, we will use already well-developed models such as YOLO, and OpenPose to detect, and pose estimation respectively. Being a hands free method of filling out multiple sections of the TCCC Card, this will save time and people from needing to help fill out cards as well having digital copies during patient handoff better ensuring correct and important information gets passed on.
 
 ## Branch Overview
-This branch is the merge between object detection using yolov5 and pose estiamtion using mobilenet. We feed the coordinates of yolov5 detections into mobilenet to localize the detection to a segment on the body.
+This branch is our code submission for ICCV. It is the merge between object detection using yolov5 and pose estiamtion using mobilenet. We feed the coordinates of yolov5 detections into mobilenet to localize the detection to a segment on the body.
 
 # Getting Started (REQUIRED: Python >= 3.10)
 
