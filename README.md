@@ -19,38 +19,21 @@ In response to the challenges faced in documenting medical procedures in militar
 ## Framework
 
 ![Alt Text](figure/full_pipeline_23Jun.jpg)
-An overview architecture of our synthetic prior-aware animal ControlNet (SPAC-Net), composed of three parts: pose augmentation,
-style transfer and dataset generation. The SPAC-Net pipeline leads to generation of our probabilistically-valid animal 
-SPAC-Animals dataset.
+Illustration of our comprehensive pipeline for casualty status documentation. The pipeline consists of two main stages, shown from left to right. In the first stage (Pairing Matrix Creation), the input video is processed frame by frame, and relevant detections are analyzed and summarized to generate a pairing matrix. In the second stage (Video Post Processing), the summarized detections undergo post-processing to extract TCCC-relevant information. Subsequently, in the Results Generation stage, the pipeline generates a digital TCCC card formatted with the extracted information, and its metrics are reported based on the ground truth data.
 
-![Alt Text](figure/bi-controlnet4.jpg)
-The Bi-ControlNet architecture, which separates the detection of the HED boundary for the background and the subject.
 ## Main Results
-### he effect of SPAC-Animals with limited real data of pose estimation results of the common backbones, HRNet-w32 tested on Zebra-300 and rhino-300  
-| Method | Training Set | Test Animal | Average |Eye | Nose | Neck | Shoulders | Elbows | F-Paws | Hips | Kness | B-Paws | RoT | 
-|--------|--------------|-------------|-----|------|------|-----------|--------|--------|------|-------|--------|-----|---------|
-| MMPose | R(99)        | Zebra       | 78.7    |97.3| 95.8 | 83.2 | 78.8      | 77.1   | 62.6   | 86.0 | 74.9  | 59.8   | 82.4| 
-| MMPose | R(99)+AP10K(8K)| Zebra      | 91.4    |97.5| 97.2 | 79.4 | 87.8      | 90.3   | 93.8   | **95.3** | 94.1  | 89.5   | 86.4| 
-| MMPose | R(99)+SynAP(3K)| Zebra      | 92.4    |**97.8**| **98.3** | 81.1 | 94.0      | 93.5   | 92.0   | 93.7 | 93.5  | 89.0   | 87.6| 
-| MMPose | R(99)+SPAC(3K)| Zebra       | **96.3**|**97.8**| 96.5 | **93.4** | **98.4** | **95.5** | 92.9   | **98.2** | **96.9**  | **95.7**   | **97.2**| 
-| MMPose | R(99)        | Rhino       | 88.3    |93.1| 99.7 | 77.0 | 93.8      | 91.0   | 86.5   | 84.2 | 92.9  | 72.3   | 97.0| 
-| MMPose | R(99)+AP10K(8K)| Rhino      | **96.7** |**98.1**| **98.6** | 82.4 | **98.6**      | **97.8**   | **97.9**   | 93.5 | **98.5**  | **98.6**   | **98.5**| 
-| MMPose | R(99)+SynAP(3K)| Rhino      | 95.9    |99.6| 99.7 | **83.4** | 98.4      | 97.3   | 96.4   | 93.7 | 96.2  | 94.5   | 97.7| 
-| MMPose | R(99)+SPAC(3K)| Rhino       | 95.9    |99.7| 98.0 | 81.8 | 97.5      | 96.4   | 97.1   | **94.2** | 96.5  | 96.2   | **98.5**| 
+| HPE Model | Z-Score Window Size | Min Distance RC | Min Pose Bbox Area RC | Min Number of Joints RC | c-threshold | PeTA Usage | Raw Precision | TCCC Precision | TCCC Recall | 
+|--------|--------------|-------------|-----|------|------|-----------|--------|--------|------|
+| Base | NA | 1       | 0    |97.3| 95.8 | 83.2 | 78.8      | 77.1   | 62.6   | 
+| Base | 60 | 1      | 0    |97.5| 97.2 | 79.4 | 87.8      | 90.3   | 93.8  | 
+| Base | 60 | 1      | 0    |**97.8**| **98.3** | 81.1 | 94.0      | 93.5   | 92.0   | 
+| Base | 60 | .25       | .1 |**97.8**| 96.5 | **93.4** | **98.4** | **95.5** | 92.9   |
+| Mann | 60 | .1       | .1 |93.1| 99.7 | 77.0 | 93.8      | 91.0   | 86.5   |
+| Mann | 60 | .25      | .1 |**98.1**| **98.6** | 82.4 | **98.6**      | **97.8**   | **97.9**   |
+| HuMann | 60 | .1      | .1 |99.6| 99.7 | **83.4** | 98.4      | 97.3   | 96.4   |
+| HuMann | 60 | .25       | .3 |99.7| 98.0 | 81.8 | 97.5      | 96.4   | 97.1   |
+| Mann | 60 | .5      | .1 |**98.1**| **98.6** | 82.4 | **98.6**      | **97.8**   | **97.9**   |
 
-### A comparative analysis of different types of synthetic data.
-| Method | Training Set | Test Animal |  Average |Eye  | Nose | Neck | Shoulders | Elbows | F-Paws | Hips | Kness | B-Paws | RoT  |
-|--------|--------------|-------------|------|------|------|-----------|--------|--------|------|-------|--------|------|---------|
-| MMPose | R(99)        | Zebra       |**97.3**|**95.8** | **83.2** | 78.8      | 77.1   |**62.6**  | 86.0 | 74.9  | 59.8 | 82.4| 78.7    |
-| MMPose | Simple(3K)   | Zebra       | 30.7 | 19.9 | 31.1 | 48.0      | 34.1   | 36.4   | 41.9 | 38.3  | 34.0 | 45.6| 36.7    |
-| MMPose | SynAP(3K)    | Zebra       | 47.1 | 39.9 | 36.0 | 64.7      | 38.9   | 27.9   | 55.4 | 52.9  | 38.0 | 61.6| 46.6    |
-| MMPose | ControlNet(3K)| Zebra      | 88.8 | 81.8 | 53.1 | 78.2      | 62.8   | 58.1   | 67.6 | 76.6  |**73.0**| 66.4| 70.9    |
-| MMPose | Bi-ControlNet(3K)| Zebra   | 84.7 | 73.4 | 78.3 |**89.4**   |**78.1**|**62.6**|**91.4**|**83.5** | 68.4 |**94.8**|**80.4**|
-| MMPose | R(99)        | Rhino       | **93.1**|**99.7**|**77.0**|**93.8**|**91.0**|**86.5**| 84.2 |**92.9**|**72.3**|**97.0**|**88.3**    |
-| MMPose | Simple(3K)   | Rhino       | 33.2 | 28.4 | 30.1 | 28.4      | 18.0   | 14.7   | 50.0 | 38.1  | 22.8 | 47.0| 29.9    |
-| MMPose | SynAP(3K)    | Rhino       | 83.3 | 78.7 | 68.6 | 71.9      | 55.8   | 40.3   | 83.8 | 70.2  | 35.9 | 87.2| 64.9    |
-|MMPose	|ControlNet(3K)|	Rhino	|68.3	|67.3	|66.6	|72.4	|59.4	|51.1	|81.2	|69.2	|51.7	|81.2	|65.8|
-|MMPose	|Bi-ControlNet(3K)|	Rhino	|80.6	|77.3|	72.0|	85.0	|67.1	|46.0|	**91.1**	|77.3	|46.3	|86.8	|71.5|
 
 ![Alt Text](figure/controlnet_ablation3.jpg)
 ## Experiment
