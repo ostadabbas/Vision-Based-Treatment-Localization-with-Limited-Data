@@ -1,5 +1,6 @@
 # Vision-Based Treatment Localization with Limited Data: Automated Documentation of Military Emergency Medical Procedures
-*Authors: Trevor Powers, William Chu, Marc Vaillant, Sarah Ostadabbas*
+*Authors: Trevor Powers, Elaheh Hatamimajoumerd, William Chu, Marc Vaillant,
+Rishi Shah, Vishakk Rajendran, Frank Diabour, Richard Fletcher, Sarah Ostadabbas* 
 
 <p align="center">
   <a href="#Introduction">Introduction</a> |
