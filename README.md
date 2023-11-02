@@ -63,9 +63,11 @@ python demo.py
 If you use our code, datasets or models in your research, please cite with:
 
 ```
-@article{???,
+@inproceedings{powers2023vision,
   title={Vision-Based Treatment Localization with Limited Data: Automated Documentation of Military Emergency Medical Procedures},
-  author={Powers, Trevor and Hatamimajoumerd, Elaheh and Chu, William and Rajendran, Vishakk and Shah, Rishi and Diabour, Frank and Vaillant1, Marc and Fletcher, Richard and Ostadabbas, Sarah},
+  author={Powers, Trevor and Hatamimajoumerd, Elaheh and Chu, William and Rajendran, Vishakk and Shah, Rishi and Diabour, Frank and Vaillant, Marc and Fletcher, Richard and Ostadabbas, Sarah},
+  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
+  pages={1819--1828},
   year={2023}
 }
 ```
